@@ -32,7 +32,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Download data and calculate allocation
+      - name: Calculate allocation from uploaded data
         run: python run_allocation.py
 
       - name: Add allocation to workflow summary

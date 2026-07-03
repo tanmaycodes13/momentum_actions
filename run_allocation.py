@@ -1,47 +1,16 @@
 #!/usr/bin/env python3
-"""Download two years of NSE ETF data and produce the current allocation."""
+"""Read uploaded NSE ETF data and produce the current allocation."""
 
 from __future__ import annotations
 
 import argparse
-import time
 from datetime import date, datetime, timedelta, timezone
-from io import StringIO
 from pathlib import Path
 
 import pandas as pd
-import requests
-
-
-SYMBOLS = [
-    "ITBEES",
-    "SBIETFCON",
-    "INFRAIETF",
-    "SETFNIFBK",
-    "HEALTHIETF",
-    "CPSEETF",
-    "BFSI",
-    "MAKEINDIA",
-    "COMMOIETF",
-    "FMCGIETF",
-    "AUTOBEES",
-    "ENERGY",
-]
 
 LOOKBACK_TRADING_DAYS = 90
 TOP_N = 5
-CHUNK_DAYS = 180
-BASE_URL = "https://www.nseindia.com"
-API_URL = f"{BASE_URL}/api/historicalOR/generateSecurityWiseHistoricalData"
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"
-    ),
-    "Accept": "text/csv,*/*",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Referer": f"{BASE_URL}/",
-}
 
 
 def india_today() -> date:
@@ -49,63 +18,34 @@ def india_today() -> date:
     return datetime.now(india_timezone).date()
 
 
-def date_chunks(start: date, end: date):
-    current = start
-    while current <= end:
-        chunk_end = min(current + timedelta(days=CHUNK_DAYS - 1), end)
-        yield current, chunk_end
-        current = chunk_end + timedelta(days=1)
+def load_uploaded_data(
+    data_dir: Path, start: date, end: date
+) -> dict[str, pd.DataFrame]:
+    files = sorted(data_dir.glob("*_FULL.csv"))
+    if not files:
+        raise RuntimeError(f"No *_FULL.csv files found in {data_dir}")
 
+    datasets: dict[str, pd.DataFrame] = {}
+    for path in files:
+        symbol = path.stem[:-5]
+        data = pd.read_csv(path, encoding="utf-8-sig")
+        data.columns = data.columns.str.strip()
+        missing = {"Date", "Close Price"}.difference(data.columns)
+        if missing:
+            raise RuntimeError(f"{path} is missing columns: {sorted(missing)}")
 
-def make_session() -> requests.Session:
-    session = requests.Session()
-    session.headers.update(HEADERS)
-    response = session.get(BASE_URL, timeout=30)
-    response.raise_for_status()
-    return session
+        data["Date"] = pd.to_datetime(data["Date"], errors="coerce")
+        data = data.dropna(subset=["Date"])
+        data = data.loc[
+            (data["Date"].dt.date >= start) & (data["Date"].dt.date <= end)
+        ].sort_values("Date").drop_duplicates("Date")
+        if data.empty:
+            raise RuntimeError(f"{path} has no data between {start} and {end}")
 
+        datasets[symbol] = data
+        print(f"Loaded {symbol}: {len(data)} rows through {data['Date'].max().date()}")
 
-def download_symbol(
-    session: requests.Session, symbol: str, start: date, end: date
-) -> pd.DataFrame:
-    frames: list[pd.DataFrame] = []
-
-    for chunk_start, chunk_end in date_chunks(start, end):
-        params = {
-            "from": chunk_start.strftime("%d-%m-%Y"),
-            "to": chunk_end.strftime("%d-%m-%Y"),
-            "symbol": symbol,
-            "type": "priceVolume",
-            "series": "ALL",
-            "csv": "true",
-        }
-
-        for attempt in range(1, 4):
-            try:
-                response = session.get(API_URL, params=params, timeout=60)
-                response.raise_for_status()
-                if "Date" not in response.text:
-                    raise RuntimeError("NSE response did not contain CSV price data")
-                frames.append(pd.read_csv(StringIO(response.text), encoding="utf-8-sig"))
-                break
-            except (requests.RequestException, RuntimeError) as exc:
-                if attempt == 3:
-                    raise RuntimeError(
-                        f"Could not download {symbol} for {chunk_start} to {chunk_end}"
-                    ) from exc
-                time.sleep(3 * attempt)
-
-        time.sleep(1.5)
-
-    if not frames:
-        raise RuntimeError(f"NSE returned no data for {symbol}")
-
-    data = pd.concat(frames, ignore_index=True)
-    data.columns = data.columns.str.strip()
-    if "Date" not in data.columns:
-        raise RuntimeError(f"Downloaded data for {symbol} has no Date column")
-    data["Date"] = pd.to_datetime(data["Date"], errors="coerce")
-    return data.dropna(subset=["Date"]).sort_values("Date").drop_duplicates("Date")
+    return datasets
 
 
 def clean_price_series(series: pd.Series) -> pd.Series:
@@ -125,7 +65,7 @@ def build_price_frame(downloads: dict[str, pd.DataFrame]) -> pd.DataFrame:
             .str.replace(r"\s+", " ", regex=True)
         )
         if "close price" not in normalized.columns:
-            raise RuntimeError(f"Downloaded data for {symbol} has no Close Price column")
+            raise RuntimeError(f"Uploaded data for {symbol} has no Close Price column")
         normalized = normalized.set_index(pd.to_datetime(normalized["date"]))
         prices[symbol] = clean_price_series(normalized["close price"])
 
@@ -136,7 +76,7 @@ def build_price_frame(downloads: dict[str, pd.DataFrame]) -> pd.DataFrame:
 def calculate_allocation(prices: pd.DataFrame) -> tuple[pd.Timestamp, pd.DataFrame]:
     if len(prices) <= LOOKBACK_TRADING_DAYS:
         raise RuntimeError(
-            f"Only {len(prices)} common trading days were downloaded; "
+            f"Only {len(prices)} common trading days were available; "
             f"more than {LOOKBACK_TRADING_DAYS} are required"
         )
 
@@ -206,14 +146,12 @@ The complete ranking is available in `momentum_ranking.csv`.
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--output-dir", type=Path, default=Path("output")
-    )
+    parser.add_argument("--output-dir", type=Path, default=Path("output"))
     parser.add_argument(
         "--data-dir",
         type=Path,
-        default=Path("/tmp/momentum-actions-data"),
-        help="Temporary destination for downloaded CSV files",
+        default=Path("data"),
+        help="Directory containing uploaded *_FULL.csv files",
     )
     parser.add_argument(
         "--end-date",
@@ -228,21 +166,13 @@ def main() -> None:
     args = parse_args()
     end = args.end_date or india_today()
     start = end - timedelta(days=2 * 365)
-    args.data_dir.mkdir(parents=True, exist_ok=True)
-
-    print(f"Downloading {start} through {end} from NSE")
-    session = make_session()
-    downloads: dict[str, pd.DataFrame] = {}
-    for symbol in SYMBOLS:
-        print(f"Downloading {symbol}...")
-        data = download_symbol(session, symbol, start, end)
-        data.to_csv(args.data_dir / f"{symbol}_FULL.csv", index=False)
-        downloads[symbol] = data
+    print(f"Loading uploaded data for {start} through {end}")
+    downloads = load_uploaded_data(args.data_dir, start, end)
 
     prices = build_price_frame(downloads)
     as_of, ranking = calculate_allocation(prices)
     write_outputs(args.output_dir, end, as_of, ranking)
-    print(f"Allocation generated using NSE data through {as_of.date()}")
+    print(f"Allocation generated using uploaded data through {as_of.date()}")
 
 
 if __name__ == "__main__":

@@ -1,8 +1,8 @@
 # ETF allocation GitHub Action
 
-This automation downloads the trailing two calendar years for the configured
-NSE ETFs, calculates 90-trading-day momentum, and opens a pull request with the
-current top-five equal-weight allocation.
+This automation reads the uploaded `data/*_FULL.csv` NSE ETF files, uses the
+trailing two calendar years, calculates 90-trading-day momentum, and opens a
+pull request with the current top-five equal-weight allocation.
 
 ## Set up
 
@@ -21,7 +21,5 @@ and opens a PR containing:
 - `output/momentum_ranking.csv`
 - `output/allocation_report.md`
 
-Raw market data is kept temporarily on the runner and is not committed.
-
-If NSE blocks the GitHub-hosted runner's IP address, rerun the workflow. NSE's
-public endpoints occasionally reject automated cloud traffic.
+The ETF CSV files in `data/` are the strategy's tradeable universe. Add or
+remove a `*_FULL.csv` file to change that universe.
