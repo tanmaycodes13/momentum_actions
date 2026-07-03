@@ -27,13 +27,13 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: momentum_actions/requirements.txt
+          cache-dependency-path: requirements.txt
 
       - name: Install dependencies
-        run: pip install -r momentum_actions/requirements.txt
+        run: pip install -r requirements.txt
 
       - name: Download data and calculate allocation
-        run: python momentum_actions/run_allocation.py
+        run: python run_allocation.py
 
       - name: Add allocation to workflow summary
         if: always()
@@ -51,7 +51,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -C "$BRANCH"
-          git add momentum_actions/output
+          git add output
 
           if git diff --cached --quiet; then
             echo "No allocation changes to commit."
@@ -68,10 +68,10 @@ jobs:
               --base "$DEFAULT_BRANCH" \
               --head "$BRANCH" \
               --title "ETF allocation for ${RUN_DATE}" \
-              --body-file momentum_actions/output/allocation_report.md
+              --body-file output/allocation_report.md
           else
             gh pr edit "$EXISTING_PR" \
               --repo "$REPOSITORY" \
               --title "ETF allocation for ${RUN_DATE}" \
-              --body-file momentum_actions/output/allocation_report.md
+              --body-file output/allocation_report.md
           fi

@@ -207,7 +207,7 @@ The complete ranking is available in `momentum_ranking.csv`.
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--output-dir", type=Path, default=Path("momentum_actions/output")
+        "--output-dir", type=Path, default=Path("output")
     )
     parser.add_argument(
         "--data-dir",
