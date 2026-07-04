@@ -2,6 +2,11 @@ name: ETF daily allocation PR
 
 on:
   workflow_dispatch:
+    inputs:
+      end_date:
+        description: "Allocation date (YYYY-MM-DD); leave blank to use today in India"
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -33,7 +38,14 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Calculate allocation from uploaded data
-        run: python run_allocation.py
+        env:
+          END_DATE: ${{ inputs.end_date }}
+        run: |
+          if [ -n "$END_DATE" ]; then
+            python run_allocation.py --end-date "$END_DATE"
+          else
+            python run_allocation.py
+          fi
 
       - name: Add allocation to workflow summary
         if: always()
@@ -43,8 +55,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
+          REQUESTED_DATE: ${{ inputs.end_date }}
         run: |
-          RUN_DATE=$(TZ=Asia/Kolkata date +%F)
+          RUN_DATE="${REQUESTED_DATE:-$(TZ=Asia/Kolkata date +%F)}"
           BRANCH="actions/etf-allocation-${RUN_DATE}"
           DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
 

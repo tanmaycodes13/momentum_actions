@@ -39,12 +39,20 @@ def load_uploaded_data(
         data = data.loc[
             (data["Date"].dt.date >= start) & (data["Date"].dt.date <= end)
         ].sort_values("Date").drop_duplicates("Date")
-        if data.empty:
-            raise RuntimeError(f"{path} has no data between {start} and {end}")
+        if len(data) <= LOOKBACK_TRADING_DAYS:
+            print(
+                f"Skipping {symbol}: only {len(data)} rows were available by {end}; "
+                f"at least {LOOKBACK_TRADING_DAYS + 1} are required"
+            )
+            continue
 
         datasets[symbol] = data
         print(f"Loaded {symbol}: {len(data)} rows through {data['Date'].max().date()}")
 
+    if not datasets:
+        raise RuntimeError(
+            f"No ETF had enough history to calculate momentum as of {end}"
+        )
     return datasets
 
 
@@ -91,11 +99,10 @@ def calculate_allocation(prices: pd.DataFrame) -> tuple[pd.Timestamp, pd.DataFra
     ranking["rank"] = range(1, len(ranking) + 1)
     ranking["weight"] = 0.0
 
-    # Preserve the notebook's rule: invest equally in the top five when the
-    # strongest ETF has positive 90-trading-day momentum; otherwise hold cash.
-    if ranked.iloc[0] > 0:
-        selected = ranked.index[:TOP_N]
-        ranking.loc[selected, "weight"] = 1.0 / TOP_N
+    # Strict absolute-momentum filter: never allocate to a negative-momentum ETF.
+    selected = ranked[ranked > 0].index[:TOP_N]
+    if len(selected):
+        ranking.loc[selected, "weight"] = 1.0 / len(selected)
 
     ranking["selected"] = ranking["weight"] > 0
     return as_of, ranking.reset_index()[
@@ -130,7 +137,7 @@ def write_outputs(
 - Workflow run date (India): {run_date.isoformat()}
 - Latest common NSE trading date: {as_of.date().isoformat()}
 - Momentum lookback: {LOOKBACK_TRADING_DAYS} trading days
-- Allocation rule: top {TOP_N}, equal weighted, when strongest momentum is positive
+- Allocation rule: up to {TOP_N} positive-momentum ETFs, equal weighted
 
 | Symbol | Weight | 90-day momentum |
 |---|---:|---:|
