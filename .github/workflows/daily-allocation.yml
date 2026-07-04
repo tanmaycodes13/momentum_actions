@@ -37,15 +37,19 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Calculate allocation from uploaded data
+      - name: Resolve allocation date and output directory
         env:
-          END_DATE: ${{ inputs.end_date }}
+          REQUESTED_DATE: ${{ inputs.end_date }}
         run: |
-          if [ -n "$END_DATE" ]; then
-            python run_allocation.py --end-date "$END_DATE"
-          else
-            python run_allocation.py
-          fi
+          ALLOCATION_DATE="${REQUESTED_DATE:-$(TZ=Asia/Kolkata date +%F)}"
+          echo "ALLOCATION_DATE=$ALLOCATION_DATE" >> "$GITHUB_ENV"
+          echo "OUTPUT_DIR=allocation_$ALLOCATION_DATE" >> "$GITHUB_ENV"
+
+      - name: Calculate allocation from uploaded data
+        run: |
+          python run_allocation.py \
+            --end-date "$ALLOCATION_DATE" \
+            --output-dir "$OUTPUT_DIR"
 
       - name: Add allocation to workflow summary
         if: always()
@@ -55,23 +59,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-          REQUESTED_DATE: ${{ inputs.end_date }}
         run: |
-          RUN_DATE="${REQUESTED_DATE:-$(TZ=Asia/Kolkata date +%F)}"
-          BRANCH="actions/etf-allocation-${RUN_DATE}"
+          BRANCH="actions/etf-allocation-${ALLOCATION_DATE}"
           DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -C "$BRANCH"
-          git add output
+          git add "$OUTPUT_DIR"
 
           if git diff --cached --quiet; then
             echo "No allocation changes to commit."
             exit 0
           fi
 
-          git commit -m "Add ETF allocation for ${RUN_DATE}"
+          git commit -m "Add ETF allocation for ${ALLOCATION_DATE}"
           git push --force-with-lease origin "$BRANCH"
 
           EXISTING_PR=$(gh pr list --repo "$REPOSITORY" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
@@ -80,11 +82,11 @@ jobs:
               --repo "$REPOSITORY" \
               --base "$DEFAULT_BRANCH" \
               --head "$BRANCH" \
-              --title "ETF allocation for ${RUN_DATE}" \
-              --body-file output/allocation_report.md
+              --title "ETF allocation for ${ALLOCATION_DATE}" \
+              --body-file "$OUTPUT_DIR/allocation_report.md"
           else
             gh pr edit "$EXISTING_PR" \
               --repo "$REPOSITORY" \
-              --title "ETF allocation for ${RUN_DATE}" \
-              --body-file output/allocation_report.md
+              --title "ETF allocation for ${ALLOCATION_DATE}" \
+              --body-file "$OUTPUT_DIR/allocation_report.md"
           fi

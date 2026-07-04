@@ -134,7 +134,7 @@ def write_outputs(
     )
     report = f"""# ETF momentum allocation
 
-- Workflow run date (India): {run_date.isoformat()}
+- Requested allocation date: {run_date.isoformat()}
 - Latest common NSE trading date: {as_of.date().isoformat()}
 - Momentum lookback: {LOOKBACK_TRADING_DAYS} trading days
 - Allocation rule: up to {TOP_N} positive-momentum ETFs, equal weighted
@@ -153,7 +153,12 @@ The complete ranking is available in `momentum_ranking.csv`.
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output-dir", type=Path, default=Path("output"))
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Output directory; defaults to allocation_YYYY-MM-DD",
+    )
     parser.add_argument(
         "--data-dir",
         type=Path,
@@ -172,14 +177,18 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     end = args.end_date or india_today()
+    output_dir = args.output_dir or Path(f"allocation_{end.isoformat()}")
     start = end - timedelta(days=2 * 365)
     print(f"Loading uploaded data for {start} through {end}")
     downloads = load_uploaded_data(args.data_dir, start, end)
 
     prices = build_price_frame(downloads)
     as_of, ranking = calculate_allocation(prices)
-    write_outputs(args.output_dir, end, as_of, ranking)
-    print(f"Allocation generated using uploaded data through {as_of.date()}")
+    write_outputs(output_dir, end, as_of, ranking)
+    print(
+        f"Allocation generated using uploaded data through {as_of.date()} "
+        f"in {output_dir}"
+    )
 
 
 if __name__ == "__main__":

@@ -21,11 +21,18 @@ calendar years. If the selected date is a weekend or market holiday, the latest
 common trading date before it is used.
 
 The action creates or updates a branch named `actions/etf-allocation-YYYY-MM-DD`
-and opens a PR containing:
+and opens a PR containing a dated audit directory:
 
-- `output/todays_allocation.csv`
-- `output/momentum_ranking.csv`
-- `output/allocation_report.md`
+```text
+allocation_YYYY-MM-DD/
+├── todays_allocation.csv
+├── momentum_ranking.csv
+└── allocation_report.md
+```
+
+Merge each PR to retain that allocation in the repository's audit history.
+Rerunning the same date updates the existing branch and PR instead of creating
+a duplicate directory.
 
 The ETF CSV files in `data/` are the strategy's tradeable universe. Add or
 remove a `*_FULL.csv` file to change that universe.
