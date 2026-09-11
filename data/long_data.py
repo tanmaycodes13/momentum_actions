@@ -10,12 +10,12 @@ SYMBOLS = [
     "ITBEES", "SBIETFCON", "INFRAIETF", "SETFNIFBK",
     "HEALTHIETF", "CPSEETF", "BFSI", "MAKEINDIA",
     "COMMOIETF", "FMCGIETF", "AUTOBEES", "ENERGY",
-    "LIQUIDCASE", 
-    "NIFTYBEES"
+    # "LIQUIDCASE", 
+    # "NIFTYBEES"
 ]
 SYMBOL = "ITBEES"
 START_DATE = datetime(2020, 1, 4)
-END_DATE = datetime(2026, 8, 3)
+END_DATE = datetime(2026, 9, 12)
 
 CHUNK_DAYS = 365  # try 180 if NSE blocks
 
