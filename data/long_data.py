@@ -15,7 +15,7 @@ SYMBOLS = [
 ]
 SYMBOL = "ITBEES"
 START_DATE = datetime(2020, 1, 4)
-END_DATE = datetime(2026, 9, 12)
+END_DATE = datetime(2026, 10, 9)
 
 CHUNK_DAYS = 365  # try 180 if NSE blocks
 
